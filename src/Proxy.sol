@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzzepelin/contracts/proxy/transaprent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transaprent/ProxyAdmin.sol";
 
-contract ERC1967Proxy is Proxy, ERC1967Upgrade {
+contract DAOProxy is Proxy, ERC1967Upgrade {
     constructor(
         address _logic,
         bytes memory _data,
@@ -19,7 +18,9 @@ contract ERC1967Proxy is Proxy, ERC1967Upgrade {
                 bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1)
         );
 
-        _setAdmin(address(new ProxyAdmin(initialOwner)));
+        ProxyAdmin admin = new ProxyAdmin();
+        admin.transferOwnership(initialOwner); // 초기 소유자 설정
+        _setAdmin(address(admin));
         _upgradeToAndCall(_logic, _data, false);
     }
 
