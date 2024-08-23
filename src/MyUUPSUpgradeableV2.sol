@@ -15,12 +15,11 @@ contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
         value2 = _value;
     }
 
+    function returnValue2() public view returns (uint256) {
+        return value2;
+    }
+
     function version() public pure virtual override returns (string memory) {
         return "V2";
     }
-
-    // UUPS 업그레이드를 위한 권한 검사 함수
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
 }

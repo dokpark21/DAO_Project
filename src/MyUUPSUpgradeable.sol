@@ -5,19 +5,26 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-
-contract MyUUPSUpgradeable isInitializable, UUPSUpgradeable, OwnableUpgradeable{
+contract MyUUPSUpgradeable is
+    Initializable,
+    UUPSUpgradeable,
+    OwnableUpgradeable
+{
     // 상태 변수 및 로직 정의
     uint256 public value;
 
-    function initialize(uint256 _initialValue) public initializer {     
+    function initialize(uint256 _initialValue) public initializer {
         value = _initialValue;
 
-         __Ownable_init(); // Ownable 초기화
+        __Ownable_init(); // Ownable 초기화
     }
 
     function setValue(uint256 _value) public onlyOwner {
         value = _value;
+    }
+
+    function returnValue() public view returns (address) {
+        return value;
     }
 
     function version() public pure virtual override returns (string memory) {
