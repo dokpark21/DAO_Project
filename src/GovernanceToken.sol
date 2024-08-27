@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract GovernanceToken {
+contract GovernanceToken is ERC20 {
     mapping(address => address) public _delegates;
     mapping(address => mapping(uint32 => Checkpoint)) public _checkpoints;
     mapping(address => uint32) public _numCheckpoints;
@@ -121,21 +121,6 @@ contract GovernanceToken {
         return _checkpoints[account][lower].votes;
     }
 
-    function getPastTotalSupply(
-        uint256 blockNumber
-    ) public view override returns (uint256) {
-        require(
-            blockNumber < block.number,
-            "GovernanceToken: block not yet mined"
-        );
-
-        return totalSupply(); // 전체 토큰 공급량을 반환
-    }
-
-    function delegates(address account) public view override returns (address) {
-        return _delegates[account];
-    }
-
     function delegate(address delegatee) public override {
         _delegate(msg.sender, delegatee);
     }
@@ -200,6 +185,10 @@ contract GovernanceToken {
                 uint256 fromRepOld = fromRepNum > 0
                     ? _checkpoints[fromDelegate][fromRepNum - 1].votes
                     : 0;
+                require(
+                    fromRepOld >= amount,
+                    "GovernanceToken: delegate has no votes to delegate"
+                );
                 uint256 fromRepNew = fromRepOld - amount;
                 _writeCheckpoint(
                     fromDelegate,
