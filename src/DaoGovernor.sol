@@ -53,7 +53,6 @@ contract DaoGovernor is
         GovernorVotes(_token)
     {}
 
-    // Override Governor functions with state management
     function propose(
         address[] calldata targets,
         uint256[] calldata values,
