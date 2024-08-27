@@ -4,14 +4,16 @@ pragma solidity ^0.8.19;
 import "./MyUUPSUpgradeable.sol";
 
 contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
-    // 상태 변수 및 로직 정의
+    // slot zero: value(V1)
     uint256 public value2;
 
-    function initializeV2(uint256 _initialValue) public initializer {
+    // New initialize function
+    function initializeV2(uint256 _initialValue) public reinitializer(2) {
         value2 = _initialValue;
+        emergencyStopped = false;
     }
 
-    function setValue2(uint256 _value) public onlyOwner {
+    function setValue2(uint256 _value) public notEmergency onlyOwner {
         value2 = _value;
     }
 
@@ -19,6 +21,7 @@ contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
         return value2;
     }
 
+    // 업그레이드된 버전 함수
     function version() public pure virtual override returns (string memory) {
         return "V2";
     }

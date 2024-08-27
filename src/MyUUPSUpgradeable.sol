@@ -10,8 +10,10 @@ contract MyUUPSUpgradeable is
     UUPSUpgradeable,
     OwnableUpgradeable
 {
-    // 상태 변수 및 로직 정의
+    bool public emergencyStopped;
     uint256 public value;
+
+    event UpgradeAuthorized(address indexed newImplementation);
 
     function initialize(uint256 _initialValue) public initializer {
         value = _initialValue;
@@ -19,7 +21,16 @@ contract MyUUPSUpgradeable is
         __Ownable_init(); // Ownable 초기화
     }
 
-    function setValue(uint256 _value) public onlyOwner {
+    modifier notEmergency() {
+        require(!emergencyStopped, "Emergency stop is active");
+        _;
+    }
+
+    function stopEmergency() external onlyOwner {
+        emergencyStopped = true; // 긴급 멈춤 활성화
+    }
+
+    function setValue(uint256 _value) public onlyOwner notEmergency {
         value = _value;
     }
 
@@ -31,8 +42,35 @@ contract MyUUPSUpgradeable is
         return "V1";
     }
 
-    // UUPS 업그레이드를 위한 권한 검사 함수
+    function multicall(
+        bytes[] calldata data
+    ) external payable notEmergency returns (bytes[] memory results) {
+        results = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            (bool success, bytes memory result) = address(this).delegatecall(
+                data[i]
+            );
+            require(success, "Multicall: delegatecall failed");
+            results[i] = result;
+        }
+    }
+
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyOwner {}
+    ) internal override onlyOwner {
+        require(
+            isContract(newImplementation),
+            "New implementation must be a contract"
+        );
+
+        emit UpgradeAuthorized(newImplementation);
+    }
+
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
+    }
 }
