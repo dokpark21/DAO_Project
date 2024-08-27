@@ -10,9 +10,10 @@ contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
     // New initialize function
     function initializeV2(uint256 _initialValue) public reinitializer(2) {
         value2 = _initialValue;
+        emergencyStopped = false;
     }
 
-    function setValue2(uint256 _value) public onlyOwner {
+    function setValue2(uint256 _value) public notEmergency onlyOwner {
         value2 = _value;
     }
 

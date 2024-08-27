@@ -10,7 +10,7 @@ contract MyUUPSUpgradeable is
     UUPSUpgradeable,
     OwnableUpgradeable
 {
-    // 상태 변수 및 로직 정의
+    bool public emergencyStopped;
     uint256 public value;
 
     event UpgradeAuthorized(address indexed newImplementation);
@@ -21,7 +21,16 @@ contract MyUUPSUpgradeable is
         __Ownable_init(); // Ownable 초기화
     }
 
-    function setValue(uint256 _value) public onlyOwner {
+    modifier notEmergency() {
+        require(!emergencyStopped, "Emergency stop is active");
+        _;
+    }
+
+    function stopEmergency() external onlyOwner {
+        emergencyStopped = true; // 긴급 멈춤 활성화
+    }
+
+    function setValue(uint256 _value) public onlyOwner notEmergency {
         value = _value;
     }
 
@@ -35,7 +44,7 @@ contract MyUUPSUpgradeable is
 
     function multicall(
         bytes[] calldata data
-    ) external payable returns (bytes[] memory results) {
+    ) external payable notEmergency returns (bytes[] memory results) {
         results = new bytes[](data.length);
         for (uint256 i = 0; i < data.length; i++) {
             (bool success, bytes memory result) = address(this).delegatecall(
@@ -49,17 +58,11 @@ contract MyUUPSUpgradeable is
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {
-        // 새로운 구현 주소의 유효성을 확인
-        require(
-            newImplementation != address(0),
-            "New implementation address cannot be zero"
-        );
         require(
             isContract(newImplementation),
             "New implementation must be a contract"
         );
 
-        // 업그레이드 승인 이벤트 로그 기록
         emit UpgradeAuthorized(newImplementation);
     }
 
