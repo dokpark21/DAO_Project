@@ -111,10 +111,6 @@ contract DaoGovernor is
         bytes32 descriptionHash
     ) public override(Governor) {
         require(
-            proposals[proposalId].state == ProposalState.Proposed,
-            "Proposal not in proposed state"
-        );
-        require(
             block.number > proposals[proposalId].endBlock,
             "Voting period has not ended"
         );

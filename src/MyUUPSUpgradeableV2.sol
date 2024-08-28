@@ -13,14 +13,6 @@ contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
         emergencyStopped = false;
     }
 
-    function setValue2(uint256 _value) public notEmergency onlyOwner {
-        value2 = _value;
-    }
-
-    function returnValue2() public view returns (uint256) {
-        return value2;
-    }
-
     // 업그레이드된 버전 함수
     function version() public pure virtual override returns (string memory) {
         return "V2";
