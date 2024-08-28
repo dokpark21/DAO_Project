@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import "./MyUUPSUpgradeable.sol";
 
-contract MyUUPSUpgradeableV2 is MyUUPSUpgradeable {
+contract MyUUPSUpgradeableV2 is DAOUpgradeable {
     // slot zero: value(V1)
     uint256 public value2;
 

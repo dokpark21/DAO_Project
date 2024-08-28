@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract GovernanceToken is ERC20 {
+contract GovernanceToken is ERC20, Ownable {
     mapping(address => address) public _delegates;
     mapping(address => mapping(uint32 => Checkpoint)) public _checkpoints;
     mapping(address => uint32) public _numCheckpoints;
@@ -14,6 +14,18 @@ contract GovernanceToken is ERC20 {
         uint32 fromBlock;
         uint256 votes;
     }
+
+    event DelegateChanged(
+        address indexed delegator,
+        address indexed fromDelegate,
+        address indexed toDelegate
+    );
+
+    event DelegateVotesChanged(
+        address indexed delegate,
+        uint previousBalance,
+        uint newBalance
+    );
 
     constructor(
         address _initOwner
@@ -109,7 +121,7 @@ contract GovernanceToken is ERC20 {
         uint32 upper = checkpointCount - 1;
         while (upper > lower) {
             uint32 center = upper - (upper - lower) / 2; // avoid overflow
-            VotingCheckpoint memory cp = _checkpoints[account][center];
+            Checkpoint memory cp = _checkpoints[account][center];
             if (cp.fromBlock == blockNumber) {
                 return cp.votes;
             } else if (cp.fromBlock < blockNumber) {
@@ -125,44 +137,44 @@ contract GovernanceToken is ERC20 {
         _delegate(msg.sender, delegatee);
     }
 
-    function delegateBySig(
-        address delegatee,
-        uint256 nonce,
-        uint256 expiry,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) public override {
-        uint256 chainId;
-        assembly {
-            chainId := chainid()
-        }
+    // function delegateBySig(
+    //     address delegatee,
+    //     uint256 nonce,
+    //     uint256 expiry,
+    //     uint8 v,
+    //     bytes32 r,
+    //     bytes32 s
+    // ) public override {
+    //     uint256 chainId;
+    //     assembly {
+    //         chainId := chainid()
+    //     }
 
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                DOMAIN_TYPEHASH,
-                keccak256(bytes(name())),
-                chainId,
-                address(this)
-            )
-        );
-        bytes32 structHash = keccak256(
-            abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry)
-        );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", domainSeparator, structHash)
-        );
+    //     bytes32 domainSeparator = keccak256(
+    //         abi.encode(
+    //             DOMAIN_TYPEHASH,
+    //             keccak256(bytes(name())),
+    //             chainId,
+    //             address(this)
+    //         )
+    //     );
+    //     bytes32 structHash = keccak256(
+    //         abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry)
+    //     );
+    //     bytes32 digest = keccak256(
+    //         abi.encodePacked("\x19\x01", domainSeparator, structHash)
+    //     );
 
-        address signer = ecrecover(hash, v, r, s);
-        require(signer != address(0), "GovernanceToken: invalid signature");
-        require(nonce == _nonces[signer]++, "GovernanceToken: invalid nonce");
-        require(
-            block.timestamp <= expiry,
-            "GovernanceToken: signature expired"
-        );
+    //     address signer = ecrecover(hash, v, r, s);
+    //     require(signer != address(0), "GovernanceToken: invalid signature");
+    //     require(nonce == _nonces[signer]++, "GovernanceToken: invalid nonce");
+    //     require(
+    //         block.timestamp <= expiry,
+    //         "GovernanceToken: signature expired"
+    //     );
 
-        _delegate(signer, delegatee);
-    }
+    //     _delegate(signer, delegatee);
+    // }
 
     function _delegate(address delegator, address delegatee) internal {
         address currentDelegate = _delegates[delegator];
@@ -226,7 +238,7 @@ contract GovernanceToken is ERC20 {
         ) {
             _checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
         } else {
-            _checkpoints[delegatee][nCheckpoints] = VotingCheckpoint(
+            _checkpoints[delegatee][nCheckpoints] = Checkpoint(
                 blockNumber,
                 newVotes
             );
