@@ -29,8 +29,14 @@ contract DAOProxy is Proxy, ERC1967Upgrade {
     }
 
     // fallback
-    fallback() external payable {
-        super._fallback();
+    fallback() external payable returns (bytes memory) {
+        results = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            (bool success, bytes memory result) = _implementation()
+                .delegatecall(data[i]);
+            require(success, "Multicall: delegatecall failed");
+            results[i] = result;
+        }
     }
 }
 
