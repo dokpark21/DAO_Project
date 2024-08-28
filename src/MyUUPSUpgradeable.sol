@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract DAOUpgradeable is
-    Initializable,
-    UUPSUpgradeable,
-    OwnableUpgradeable,
-    ERC20
-{
+contract DAOUpgradeable is Initializable, UUPSUpgradeable, Ownable, ERC20 {
     bool public emergencyStopped;
     uint256 public totalDeposits;
     mapping(address => uint256) private _balances; // 각 사용자별 예치 금액 관리
@@ -23,9 +18,11 @@ contract DAOUpgradeable is
     event Withdraw(address indexed user, uint256 amount);
     event FundsUsed(address indexed recipient, uint256 amount);
 
-    function initialize(address _initialOwner) public initializer {
-        __Ownable_init(_initialOwner); // Ownable 초기화
-        __ERC20_init("DAO Token", "DAO"); // ERC20 토큰 초기화
+    constructor(
+        address _initialOwner
+    ) ERC20("Upgrade Token", "UT") Ownable(_initialOwner) {}
+
+    function initialize() public initializer {
         emergencyStopped = false;
     }
 

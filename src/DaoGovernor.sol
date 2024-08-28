@@ -18,14 +18,6 @@ contract DaoGovernor is
     GovernorVotesQuorumFraction,
     GovernorTimelockControl
 {
-    // Proposal state enum to track the state of each proposal
-    enum ProposalState {
-        None,
-        Proposed,
-        Voting,
-        Executed
-    }
-
     struct Proposal {
         ProposalState state;
         uint256 voteCount;
