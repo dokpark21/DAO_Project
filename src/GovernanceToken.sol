@@ -39,7 +39,7 @@ contract GovernanceToken is ERC20, Ownable {
         _burn(from, amount);
     }
 
-    function transferOwnership(address newOwner) public onlyOwner {
+    function transferOwnership(address newOwner) public override onlyOwner {
         transferOwnership(newOwner);
     }
 
@@ -73,16 +73,9 @@ contract GovernanceToken is ERC20, Ownable {
         return super.approve(spender, amount);
     }
 
-    function increaseAllowance(
-        address spender,
-        uint256 addedValue
-    ) public override returns (bool) {
-        return super.increaseAllowance(spender, addedValue);
-    }
-
     // IVotes 인터페이스 구현
 
-    function getVotes(address account) public view override returns (uint256) {
+    function getVotes(address account) public view returns (uint256) {
         uint32 checkpointCount = _numCheckpoints[account];
         return
             checkpointCount > 0
@@ -93,7 +86,7 @@ contract GovernanceToken is ERC20, Ownable {
     function getPastVotes(
         address account,
         uint256 blockNumber
-    ) public view override returns (uint256) {
+    ) public view returns (uint256) {
         require(
             blockNumber < block.number,
             "GovernanceToken: block not yet mined"
@@ -133,7 +126,7 @@ contract GovernanceToken is ERC20, Ownable {
         return _checkpoints[account][lower].votes;
     }
 
-    function delegate(address delegatee) public override {
+    function delegate(address delegatee) public {
         _delegate(msg.sender, delegatee);
     }
 
@@ -246,6 +239,10 @@ contract GovernanceToken is ERC20, Ownable {
         }
 
         emit DelegateVotesChanged(delegatee, oldVotes, newVotes);
+    }
+
+    function clock() public view returns (uint256) {
+        return block.number;
     }
 
     function safe32(

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import {Governor} from "@openzeppelin/contracts/governance/Governor.sol";
+import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 import {GovernorSettings} from "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol";
 import {GovernorCountingSimple} from "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
 import {GovernorVotes} from "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
@@ -9,9 +10,9 @@ import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/ex
 import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
+import "forge-std/console.sol";
 
 contract DaoGovernor is
-    Governor,
     GovernorSettings,
     GovernorCountingSimple,
     GovernorVotes,
@@ -30,26 +31,25 @@ contract DaoGovernor is
     mapping(uint256 => Proposal) public proposals;
 
     constructor(
+        IVotes _token,
         TimelockController timelock_,
-        address[] memory votingOwners,
-        uint256 votingDelay_,
-        uint256 votingPeriod_,
-        uint256 quorumNumerator_,
-        uint256 quorumDenominator_,
-        IVotes _token
+        uint48 votingDelay_,
+        uint32 votingPeriod_,
+        uint256 proposalThreshold_,
+        uint256 quorumNumerator_
     )
         Governor("DAO")
-        GovernorSettings(votingDelay_, votingPeriod_, votingOwners)
+        GovernorSettings(votingDelay_, votingPeriod_, proposalThreshold_)
+        GovernorVotes(_token)
         GovernorVotesQuorumFraction(quorumNumerator_)
         GovernorTimelockControl(timelock_)
-        GovernorVotes(_token)
     {}
 
     function propose(
-        address[] calldata targets,
-        uint256[] calldata values,
-        bytes[] calldata calldatas,
-        string calldata description
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        string memory description
     ) public override(Governor) returns (uint256) {
         uint256 proposalId = super.propose(
             targets,
@@ -59,7 +59,7 @@ contract DaoGovernor is
         );
 
         proposals[proposalId] = Proposal({
-            state: ProposalState.Proposed,
+            state: ProposalState.Pending,
             voteCount: 0,
             againstVotes: 0,
             abstainVotes: 0,
@@ -73,9 +73,9 @@ contract DaoGovernor is
     function castVote(
         uint256 proposalId,
         uint8 support
-    ) public override returns (uint256) {
+    ) public override(Governor) returns (uint256) {
         require(
-            proposals[proposalId].state == ProposalState.Voting,
+            state(proposalId) == ProposalState.Active,
             "Proposal not in voting state"
         );
         uint256 weight = token().getPastVotes(msg.sender, block.number - 1);
@@ -90,9 +90,7 @@ contract DaoGovernor is
             revert("Invalid vote type");
         }
 
-        super._castVote(proposalId, msg.sender, support, "");
-
-        return weight;
+        return super.castVote(proposalId, support);
     }
 
     function execute(
@@ -101,61 +99,46 @@ contract DaoGovernor is
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
-    ) public override(Governor) {
+    ) public {
         require(
-            block.number > proposals[proposalId].endBlock,
-            "Voting period has not ended"
-        );
-        require(
-            proposals[proposalId].voteCount >= quorum(),
-            "Proposal does not meet quorum"
+            state(proposalId) == ProposalState.Succeeded,
+            "Governor: proposal not successful"
         );
 
-        super._execute(proposalId, targets, values, calldatas, descriptionHash);
+        super.execute(targets, values, calldatas, descriptionHash);
         proposals[proposalId].state = ProposalState.Executed;
     }
 
-    function _execute(
-        uint256 proposalId,
+    function _cancel(
         address[] memory targets,
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
-    ) internal override(Governor, GovernorTimelockControl) {
-        super._execute(proposalId, targets, values, calldatas, descriptionHash);
-    }
-
-    function _cancel(
-        uint256 proposalId
-    ) internal override(Governor, GovernorTimelockControl) {
-        require(
-            proposals[proposalId].state != ProposalState.Executed,
-            "Proposal already executed"
+    ) internal override(Governor, GovernorTimelockControl) returns (uint256) {
+        uint256 proposalId = hashProposal(
+            targets,
+            values,
+            calldatas,
+            descriptionHash
         );
-        proposals[proposalId].state = ProposalState.None;
-        super._cancel(proposalId);
+        require(
+            state(proposalId) != ProposalState.Executed,
+            "Governor: proposal already executed"
+        );
+        proposals[proposalId].state = ProposalState.Canceled;
+        return super._cancel(targets, values, calldatas, descriptionHash);
     }
 
-    function _executor()
-        internal
-        view
-        virtual
-        override(Governor, GovernorTimelockControl)
-        returns (address)
-    {
-        return super._executor();
-    }
-
-    function _supportsInterface(
-        bytes4 interfaceId
+    function state(
+        uint256 proposalId
     )
         public
         view
         virtual
         override(Governor, GovernorTimelockControl)
-        returns (bool)
+        returns (ProposalState)
     {
-        return super._supportsInterface(interfaceId);
+        return super.state(proposalId);
     }
 
     function votingDelay()
@@ -188,43 +171,88 @@ contract DaoGovernor is
         return super.proposalThreshold();
     }
 
-    function setVotingDelay(
-        uint256 newVotingDelay
-    ) public override(GovernorSettings) onlyGovernance {
-        super._setVotingDelay(newVotingDelay);
-    }
-
-    function setVotingPeriod(
-        uint256 newVotingPeriod
-    ) public override(GovernorSettings) onlyGovernance {
-        super._setVotingPeriod(newVotingPeriod);
-    }
-
-    function setProposalThreshold(
-        uint256 newProposalThreshold
-    ) public override(GovernorSettings) onlyGovernance {
-        super._setProposalThreshold(newProposalThreshold);
-    }
-
-    function quorum()
+    function quorum(
+        uint256 blockNumber
+    )
         public
         view
         virtual
         override(Governor, GovernorVotesQuorumFraction)
         returns (uint256)
     {
-        return super.quorum();
+        return super.quorum(blockNumber);
     }
 
-    function state(
+    function _executor()
+        internal
+        view
+        virtual
+        override(Governor, GovernorTimelockControl)
+        returns (address)
+    {
+        return super._executor();
+    }
+
+    function _supportsInterface(bytes4 interfaceId) public view returns (bool) {
+        return _supportsInterface(interfaceId);
+    }
+
+    function _executeOperations(
+        uint256 proposalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) {
+        super._executeOperations(
+            proposalId,
+            targets,
+            values,
+            calldatas,
+            descriptionHash
+        );
+    }
+
+    function _queueOperations(
+        uint256 propsalId,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        bytes32 descriptionHash
+    ) internal override(Governor, GovernorTimelockControl) returns (uint48) {
+        return
+            super._queueOperations(
+                propsalId,
+                targets,
+                values,
+                calldatas,
+                descriptionHash
+            );
+    }
+
+    function proposalNeedsQueuing(
         uint256 proposalId
     )
         public
         view
         virtual
         override(Governor, GovernorTimelockControl)
-        returns (ProposalState)
+        returns (bool)
     {
-        return proposals[proposalId].state;
+        return super.proposalNeedsQueuing(proposalId);
+    }
+
+    function _getVotes(
+        address account,
+        uint256 blockNumber,
+        bytes memory data
+    )
+        internal
+        view
+        virtual
+        override(Governor, GovernorVotes)
+        returns (uint256)
+    {
+        return super._getVotes(account, blockNumber, data);
     }
 }

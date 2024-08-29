@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../src/DaoGovernor.sol";
 import "../src/GovernanceToken.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
+import "@openzeppelin/contracts/governance/IGovernor.sol";
 
 contract DaoGovernorTest is Test {
     DaoGovernor public daoGovernor;
@@ -15,6 +16,10 @@ contract DaoGovernorTest is Test {
     address public user2;
     address[] public proposers;
     address[] public executors;
+
+    address[] targets = new address[](1);
+    uint256[] values = new uint256[](1);
+    bytes[] calldatas = new bytes[](1);
 
     function setUp() public {
         owner = address(this); // Deploying address is the owner
@@ -28,27 +33,28 @@ contract DaoGovernorTest is Test {
         governanceToken.mint(user2, 300 * 10 ** 18);
 
         // Deploy TimelockController
-        proposers = new address;
-        proposers[0] = address(this);
-        executors = new address;
-        executors[0] = address(this);
-        timelock = new TimelockController(1, proposers, executors);
-
-        // Deploy DaoGovernor
-        daoGovernor = new DaoGovernor(
-            timelock,
+        proposers.push(address(this));
+        executors.push(address(this));
+        timelock = new TimelockController(
+            1,
             proposers,
-            1, // votingDelay
-            5, // votingPeriod
-            4, // quorumNumerator
-            100, // quorumDenominator
-            IVotes(address(governanceToken))
+            executors,
+            address(this)
         );
 
         // Set timelock roles
         timelock.grantRole(timelock.PROPOSER_ROLE(), address(daoGovernor));
         timelock.grantRole(timelock.EXECUTOR_ROLE(), address(0));
-        timelock.revokeRole(timelock.TIMELOCK_ADMIN_ROLE(), address(this));
+
+        // Deploy DaoGovernor
+        daoGovernor = new DaoGovernor(
+            IVotes(address(governanceToken)),
+            timelock,
+            1, // votingDelay
+            5, // votingPeriod
+            100 * 10 ** 18, // proposalThreshold
+            4 // quorumNumerator
+        );
     }
 
     function testProposeAndVote() public {
@@ -74,7 +80,7 @@ contract DaoGovernorTest is Test {
 
         // Check initial state
         DaoGovernor.ProposalState state = daoGovernor.state(proposalId);
-        assertEq(uint(state), uint(DaoGovernor.ProposalState.Proposed));
+        assertEq(uint(state), uint(1));
 
         // Wait for the voting delay
         vm.roll(block.number + 2);
@@ -96,8 +102,9 @@ contract DaoGovernorTest is Test {
         );
 
         // Check votes
-        (, uint256 votesFor, uint256 votesAgainst, ) = daoGovernor
-            .proposalVotes(proposalId);
+        (uint256 votesAgainst, uint256 votesFor, ) = daoGovernor.proposalVotes(
+            proposalId
+        );
         assertEq(votesFor, 2 * 1000 * 10 ** 18); // owner and user1 voted "For"
         assertEq(votesAgainst, 1 * 300 * 10 ** 18); // user2 voted "Against"
 
@@ -114,7 +121,7 @@ contract DaoGovernorTest is Test {
 
         // Check state
         state = daoGovernor.state(proposalId);
-        assertEq(uint(state), uint(DaoGovernor.ProposalState.Executed));
+        assertEq(uint(state), uint(7));
     }
 
     function dummyAction() external {
