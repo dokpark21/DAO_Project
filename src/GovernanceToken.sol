@@ -9,6 +9,7 @@ contract GovernanceToken is ERC20, Ownable {
     mapping(address => mapping(uint32 => Checkpoint)) public _checkpoints;
     mapping(address => uint32) public _numCheckpoints;
     mapping(address => uint) public _nonces;
+    mapping(uint256 => uint256) public _totalSupplyCheckpoints;
 
     struct Checkpoint {
         uint32 fromBlock;
@@ -32,10 +33,12 @@ contract GovernanceToken is ERC20, Ownable {
     ) ERC20("Governance Token", "GTK") Ownable(_initOwner) {}
 
     function mint(address to, uint256 amount) public onlyOwner {
+        _totalSupplyCheckpoints[uint256(block.number)] += amount;
         _mint(to, amount);
     }
 
     function burn(address from, uint256 amount) public onlyOwner {
+        _totalSupplyCheckpoints[uint256(block.number)] -= amount;
         _burn(from, amount);
     }
 
@@ -175,7 +178,7 @@ contract GovernanceToken is ERC20, Ownable {
         _delegates[delegator] = delegatee;
 
         emit DelegateChanged(delegator, currentDelegate, delegatee);
-
+        _totalSupplyCheckpoints[uint256(block.number)] += delegatorBalance;
         _moveDelegateVotes(currentDelegate, delegatee, delegatorBalance);
     }
 
@@ -239,6 +242,16 @@ contract GovernanceToken is ERC20, Ownable {
         }
 
         emit DelegateVotesChanged(delegatee, oldVotes, newVotes);
+    }
+
+    function getPastTotalSupply(
+        uint256 blockNumber
+    ) public view returns (uint256) {
+        require(
+            blockNumber < block.number,
+            "GovernanceToken: block not yet mined"
+        );
+        return _totalSupplyCheckpoints[blockNumber];
     }
 
     function clock() public view returns (uint256) {

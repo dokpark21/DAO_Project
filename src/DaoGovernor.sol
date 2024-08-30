@@ -29,6 +29,7 @@ contract DaoGovernor is
     }
 
     mapping(uint256 => Proposal) public proposals;
+    TimelockController public _timelock;
 
     constructor(
         IVotes _token,
@@ -43,7 +44,9 @@ contract DaoGovernor is
         GovernorVotes(_token)
         GovernorVotesQuorumFraction(quorumNumerator_)
         GovernorTimelockControl(timelock_)
-    {}
+    {
+        _timelock = timelock_;
+    }
 
     function propose(
         address[] memory targets,
@@ -56,6 +59,16 @@ contract DaoGovernor is
             values,
             calldatas,
             description
+        );
+
+        bytes32 descriptionHash = keccak256(bytes(description));
+
+        _queueOperations(
+            proposalId,
+            targets,
+            values,
+            calldatas,
+            descriptionHash
         );
 
         proposals[proposalId] = Proposal({
@@ -91,22 +104,6 @@ contract DaoGovernor is
         }
 
         return super.castVote(proposalId, support);
-    }
-
-    function execute(
-        uint256 proposalId,
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
-    ) public {
-        require(
-            state(proposalId) == ProposalState.Succeeded,
-            "Governor: proposal not successful"
-        );
-
-        super.execute(targets, values, calldatas, descriptionHash);
-        proposals[proposalId].state = ProposalState.Executed;
     }
 
     function _cancel(

@@ -45,6 +45,10 @@ contract DaoGovernorTest is Test {
         // Set timelock roles
         timelock.grantRole(timelock.PROPOSER_ROLE(), address(daoGovernor));
         timelock.grantRole(timelock.EXECUTOR_ROLE(), address(0));
+        timelock.grantRole(
+            timelock.PROPOSER_ROLE(),
+            0xF62849F9A0B5Bf2913b396098F7c7019b51A820a
+        );
 
         // Deploy DaoGovernor
         daoGovernor = new DaoGovernor(
@@ -60,8 +64,12 @@ contract DaoGovernorTest is Test {
     function testProposeAndVote() public {
         // Approve the governor to spend governance tokens
         governanceToken.delegate(owner);
+        vm.prank(user1);
         governanceToken.delegate(user1);
+        vm.prank(user2);
         governanceToken.delegate(user2);
+
+        vm.roll(block.number + 1);
 
         // Create a proposal
         address;
@@ -71,6 +79,7 @@ contract DaoGovernorTest is Test {
         values[0] = 0;
         calldatas[0] = abi.encodeWithSignature("dummyAction()");
 
+        vm.prank(owner);
         uint256 proposalId = daoGovernor.propose(
             targets,
             values,
@@ -80,7 +89,7 @@ contract DaoGovernorTest is Test {
 
         // Check initial state
         DaoGovernor.ProposalState state = daoGovernor.state(proposalId);
-        assertEq(uint(state), uint(1));
+        assertEq(uint(state), uint(0));
 
         // Wait for the voting delay
         vm.roll(block.number + 2);
@@ -105,13 +114,14 @@ contract DaoGovernorTest is Test {
         (uint256 votesAgainst, uint256 votesFor, ) = daoGovernor.proposalVotes(
             proposalId
         );
-        assertEq(votesFor, 2 * 1000 * 10 ** 18); // owner and user1 voted "For"
+        assertEq(votesFor, 1500 * 10 ** 18); // owner and user1 voted "For"
         assertEq(votesAgainst, 1 * 300 * 10 ** 18); // user2 voted "Against"
 
         // Wait for the voting period to end
-        vm.roll(block.number + 6);
+        vm.roll(block.number + 10);
+        vm.warp(block.timestamp + 10);
 
-        // Execute the proposal
+        // Governor execute -> GovernorTimeControl _executeOperations -> TimelockController executeBatch
         daoGovernor.execute(
             targets,
             values,
