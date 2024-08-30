@@ -49,6 +49,10 @@ contract DaoGovernorTest is Test {
             timelock.PROPOSER_ROLE(),
             0xF62849F9A0B5Bf2913b396098F7c7019b51A820a
         );
+        timelock.grantRole(
+            timelock.CANCELLER_ROLE(),
+            0xF62849F9A0B5Bf2913b396098F7c7019b51A820a
+        );
 
         // Deploy DaoGovernor
         daoGovernor = new DaoGovernor(
@@ -208,6 +212,131 @@ contract DaoGovernorTest is Test {
         // Check that the proposal state is set to Defeated
         state = daoGovernor.state(proposalId);
         assertEq(uint(state), uint(3)); // 3 corresponds to ProposalState.Defeated
+    }
+
+    function testDuplicateVoteRejection() public {
+        // Delegate tokens
+        governanceToken.delegate(owner);
+        vm.roll(block.number + 1);
+
+        // Create a proposal
+        targets[0] = address(this);
+        values[0] = 0;
+        calldatas[0] = abi.encodeWithSignature("dummyAction()");
+
+        vm.prank(owner);
+        uint256 proposalId = daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Test Proposal"
+        );
+
+        // Check initial state
+        DaoGovernor.ProposalState state = daoGovernor.state(proposalId);
+        assertEq(uint(state), uint(0));
+
+        // Wait for the voting delay
+        vm.roll(block.number + 2);
+
+        // Cast a vote
+        daoGovernor.castVote(
+            proposalId,
+            uint8(GovernorCountingSimple.VoteType.For)
+        );
+
+        // Attempt to cast a second vote by the same voter and expect it to fail
+        vm.expectRevert();
+        daoGovernor.castVote(
+            proposalId,
+            uint8(GovernorCountingSimple.VoteType.For)
+        );
+    }
+
+    function testProposalCancellation() public {
+        // Delegate tokens
+        governanceToken.delegate(owner);
+        vm.roll(block.number + 1);
+
+        // Create a proposal
+        targets[0] = address(this);
+        values[0] = 0;
+        calldatas[0] = abi.encodeWithSignature("dummyAction()");
+
+        vm.prank(owner);
+        uint256 proposalId = daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Test Proposal"
+        );
+
+        // Check initial state
+        DaoGovernor.ProposalState state = daoGovernor.state(proposalId);
+        assertEq(uint(state), uint(0));
+
+        // Cancel the proposal
+        vm.prank(owner);
+        daoGovernor.cancel(
+            targets,
+            values,
+            calldatas,
+            keccak256(abi.encodePacked("Test Proposal"))
+        );
+
+        // Check that the proposal state is Canceled
+        state = daoGovernor.state(proposalId);
+        assertEq(uint(state), uint(2)); // 2 corresponds to ProposalState.Canceled
+    }
+
+    function testUnauthorizedRoleAccess() public {
+        // Unauthorized user attempts to propose
+        vm.prank(user2);
+        vm.expectRevert();
+        daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Unauthorized Proposal"
+        );
+
+        // Unauthorized user attempts to execute
+        vm.prank(user2);
+        vm.expectRevert();
+        daoGovernor.execute(
+            targets,
+            values,
+            calldatas,
+            keccak256(abi.encodePacked("Test Proposal"))
+        );
+    }
+
+    function testDuplicateProposalRejection() public {
+        // Delegate tokens
+        governanceToken.delegate(owner);
+        vm.roll(block.number + 1);
+
+        // Create a proposal
+        targets[0] = address(this);
+        values[0] = 0;
+        calldatas[0] = abi.encodeWithSignature("dummyAction()");
+
+        vm.prank(owner);
+        uint256 proposalId1 = daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Test Proposal"
+        );
+
+        // Attempt to create the same proposal again
+        vm.expectRevert();
+        uint256 proposalId2 = daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Test Proposal"
+        );
     }
 
     function dummyAction() external {
