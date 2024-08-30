@@ -134,6 +134,82 @@ contract DaoGovernorTest is Test {
         assertEq(uint(state), uint(7));
     }
 
+    function testProposeAndVoteRejected() public {
+        // Approve the governor to spend governance tokens
+        governanceToken.delegate(owner);
+        vm.prank(user1);
+        governanceToken.delegate(user1);
+        vm.prank(user2);
+        governanceToken.delegate(user2);
+
+        vm.roll(block.number + 1);
+
+        // Create a proposal
+        address;
+        uint256;
+        bytes;
+        targets[0] = address(this);
+        values[0] = 0;
+        calldatas[0] = abi.encodeWithSignature("dummyAction()");
+
+        vm.prank(owner);
+        uint256 proposalId = daoGovernor.propose(
+            targets,
+            values,
+            calldatas,
+            "Test Proposal"
+        );
+
+        // Check initial state
+        DaoGovernor.ProposalState state = daoGovernor.state(proposalId);
+        assertEq(uint(state), uint(0));
+
+        // Wait for the voting delay
+        vm.roll(block.number + 2);
+
+        // Cast votes (this time, majority votes "Against")
+        daoGovernor.castVote(
+            proposalId,
+            uint8(GovernorCountingSimple.VoteType.Against)
+        );
+        vm.prank(user1);
+        daoGovernor.castVote(
+            proposalId,
+            uint8(GovernorCountingSimple.VoteType.Against)
+        );
+        vm.prank(user2);
+        daoGovernor.castVote(
+            proposalId,
+            uint8(GovernorCountingSimple.VoteType.For)
+        );
+
+        // Check votes
+        (uint256 votesAgainst, uint256 votesFor, ) = daoGovernor.proposalVotes(
+            proposalId
+        );
+        assertEq(votesFor, 300 * 10 ** 18); // user2 voted "For"
+        assertEq(votesAgainst, (1000 + 500) * 10 ** 18); // owner and user1 voted "Against"
+
+        // Wait for the voting period to end
+        vm.roll(block.number + 10);
+        vm.warp(block.timestamp + 10);
+
+        vm.prank(owner);
+        vm.expectRevert();
+
+        // Try to execute the proposal (should fail)
+        daoGovernor.execute(
+            targets,
+            values,
+            calldatas,
+            keccak256(abi.encodePacked("Test Proposal"))
+        );
+
+        // Check that the proposal state is set to Defeated
+        state = daoGovernor.state(proposalId);
+        assertEq(uint(state), uint(3)); // 3 corresponds to ProposalState.Defeated
+    }
+
     function dummyAction() external {
         // Dummy action for testing
     }
