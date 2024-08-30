@@ -40,7 +40,7 @@ contract DAOUpgradeable is Initializable, UUPSUpgradeable, Ownable, ERC20 {
         emergencyStopped = true; // 긴급 멈춤 활성화
     }
 
-    function version() public pure virtual override returns (string memory) {
+    function version() public pure virtual returns (string memory) {
         return "V1";
     }
 
@@ -97,7 +97,7 @@ contract DAOUpgradeable is Initializable, UUPSUpgradeable, Ownable, ERC20 {
         totalDeposits -= amount;
         // 유저 토큰 소각 및 자금 초기화
         uint256 len = depositors.length;
-        for (int i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; i++) {
             _burn(depositors[i], amount / len);
             _balances[depositors[i]] = 0;
         }

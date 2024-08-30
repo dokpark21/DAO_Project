@@ -34,7 +34,7 @@ abstract contract ERC1967Upgrade {
      */
     function _setImplementation(address newImplementation) private {
         require(
-            Address.isContract(newImplementation),
+            _isContract(newImplementation),
             "ERC1967: new implementation is not a contract"
         );
         StorageSlot
@@ -146,5 +146,13 @@ abstract contract ERC1967Upgrade {
     function _changeAdmin(address newAdmin) internal {
         emit AdminChanged(_getAdmin(), newAdmin);
         _setAdmin(newAdmin);
+    }
+
+    function _isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
     }
 }
