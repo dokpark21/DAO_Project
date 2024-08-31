@@ -2,8 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/DaoGovernor.sol";
-import "../src/GovernanceToken.sol";
+import "../src/governance/DaoGovernor.sol";
+import "../src/governance/GovernanceToken.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
 import "@openzeppelin/contracts/governance/IGovernor.sol";
 
