@@ -3,16 +3,27 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/proxy/Proxy.sol";
 import "./ERC1967Upgrade.sol";
+import {console} from "forge-std/console.sol";
 
 // UUPS Pattern
 contract DAOProxy is ERC1967Upgrade, Proxy {
-    constructor(address _logic, bytes memory _data) payable {
+    constructor(
+        address _initOwner,
+        address _logic,
+        bytes memory _data
+    ) payable {
         assert(
             _IMPLEMENTATION_SLOT ==
                 bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1)
         );
         // 초기 구현체 설정 및 초기화 함수 호출
         _upgradeToAndCall(_logic, _data, false);
+        _changeAdmin(_initOwner);
+    }
+
+    modifier onlyAdmin() {
+        require(msg.sender == _getAdmin(), "Admin only");
+        _;
     }
 
     function _implementation()
@@ -29,7 +40,6 @@ contract DAOProxy is ERC1967Upgrade, Proxy {
         return _IMPLEMENTATION_SLOT;
     }
 
-    // 멀티콜 기능을 위한 별도 함수 추가
     function multicall(
         bytes[] calldata data
     ) external payable returns (bytes[] memory results) {
@@ -43,6 +53,6 @@ contract DAOProxy is ERC1967Upgrade, Proxy {
     }
 
     fallback() external payable override {
-        _fallback();
+        _delegate(_implementation());
     }
 }
