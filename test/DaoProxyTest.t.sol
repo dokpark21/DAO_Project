@@ -22,6 +22,7 @@ contract DAOProxyTest is Test {
         user2 = address(0x456);
 
         payable(user).transfer(1 ether);
+        payable(user2).transfer(1 ether);
 
         logic = new DAOUpgradeable();
 
@@ -165,7 +166,8 @@ contract DAOProxyTest is Test {
         (success, ) = address(proxy).call(withdrawCalldata);
         assertTrue(success, "Withdraw failed through proxy");
         assertEq(address(proxy).balance, 0 ether);
-        assertEq(user2.balance, 1 ether);
+        // user2 already has 1 ether
+        assertEq(user2.balance, 2 ether);
     }
 
     function testUpgrade() public {
@@ -181,8 +183,18 @@ contract DAOProxyTest is Test {
 
         (bool success, ) = address(proxy).call(upgradeCalldata);
         assertTrue(success, "Upgrade failed");
-
         assertEq(proxyAsLogic.version(), "V2");
+
+        bytes memory versionCalldata = abi.encodeWithSelector(
+            proxyAsLogic.version.selector
+        );
+
+        bytes memory result;
+        (success, result) = address(proxy).staticcall(versionCalldata);
+        string memory version = abi.decode(result, (string));
+
+        assertTrue(success, "Version call failed");
+        assertEq(version, "V2");
     }
 
     function testUpgradeFail() public {
@@ -198,5 +210,138 @@ contract DAOProxyTest is Test {
 
         vm.expectRevert();
         (bool success, ) = address(proxy).call(upgradeCalldata);
+    }
+
+    function testAfterUpgradeUserBalance() public {
+        vm.startPrank(user);
+
+        bytes memory depositCalldata = abi.encodeWithSelector(
+            proxyAsLogic.deposit.selector
+        );
+
+        (bool success, ) = address(proxy).call{value: 1 ether}(depositCalldata);
+        assertTrue(success, "Deposit failed through proxy");
+        assertEq(proxyAsLogic._balances(user), 1 ether);
+
+        vm.startPrank(proxyAdmin);
+
+        DAOUpgradeable newLogic = new DAOUpgradeableV2();
+
+        bytes memory upgradeCalldata = abi.encodeWithSelector(
+            proxyAsLogic.upgradeToAndCall.selector,
+            address(newLogic),
+            ""
+        );
+
+        (success, ) = address(proxy).call(upgradeCalldata);
+        assertTrue(success, "Upgrade failed");
+
+        bytes memory versionCalldata = abi.encodeWithSelector(
+            proxyAsLogic.version.selector
+        );
+
+        bytes memory result;
+        (success, result) = address(proxy).staticcall(versionCalldata);
+        string memory version = abi.decode(result, (string));
+        assertEq(version, "V2");
+
+        assertEq(proxyAsLogic._balances(user), 1 ether);
+
+        vm.startPrank(user);
+
+        bytes memory withdrawCalldata = abi.encodeWithSelector(
+            proxyAsLogic.withdraw.selector,
+            1 ether
+        );
+
+        (success, ) = address(proxy).call(withdrawCalldata);
+        assertTrue(success, "Withdraw failed through proxy");
+
+        assertEq(proxyAsLogic._balances(user), 0);
+        assertEq(user.balance, 1 ether);
+    }
+
+    function testUseDepositByVote() public {
+        address investmentTarget = address(0x789);
+        vm.startPrank(user);
+
+        bytes memory depositCalldata = abi.encodeWithSelector(
+            proxyAsLogic.deposit.selector
+        );
+
+        (bool success, ) = address(proxy).call{value: 1 ether}(depositCalldata);
+        assertTrue(success, "Deposit failed through proxy");
+        assertEq(proxyAsLogic._balances(user), 1 ether);
+
+        vm.startPrank(user2);
+
+        bytes memory depositCalldata2 = abi.encodeWithSelector(
+            proxyAsLogic.deposit.selector
+        );
+
+        (success, ) = address(proxy).call{value: 1 ether}(depositCalldata2);
+        assertTrue(success, "Deposit failed through proxy");
+        assertEq(proxyAsLogic._balances(user2), 1 ether);
+
+        vm.startPrank(proxyAdmin);
+
+        bytes memory userDepositCalldata = abi.encodeWithSelector(
+            proxyAsLogic.useDepositByVote.selector,
+            investmentTarget,
+            1 ether
+        );
+
+        (success, ) = address(proxy).call(userDepositCalldata);
+        assertTrue(success, "UseDepositByVote failed");
+
+        assertEq(address(proxy).balance, 1 ether);
+        assertEq(investmentTarget.balance, 1 ether);
+    }
+
+    function testWithdrawActiveInvestmentFail() public {
+        address investmentTarget = address(0x789);
+        vm.startPrank(user);
+
+        bytes memory depositCalldata = abi.encodeWithSelector(
+            proxyAsLogic.deposit.selector
+        );
+
+        (bool success, ) = address(proxy).call{value: 1 ether}(depositCalldata);
+        assertTrue(success, "Deposit failed through proxy");
+        assertEq(proxyAsLogic._balances(user), 1 ether);
+
+        vm.startPrank(user2);
+
+        bytes memory depositCalldata2 = abi.encodeWithSelector(
+            proxyAsLogic.deposit.selector
+        );
+
+        (success, ) = address(proxy).call{value: 1 ether}(depositCalldata2);
+        assertTrue(success, "Deposit failed through proxy");
+        assertEq(proxyAsLogic._balances(user2), 1 ether);
+
+        vm.startPrank(proxyAdmin);
+
+        bytes memory userDepositCalldata = abi.encodeWithSelector(
+            proxyAsLogic.useDepositByVote.selector,
+            investmentTarget,
+            1 ether
+        );
+
+        (success, ) = address(proxy).call(userDepositCalldata);
+        assertTrue(success, "UseDepositByVote failed");
+
+        assertEq(address(proxy).balance, 1 ether);
+        assertEq(investmentTarget.balance, 1 ether);
+
+        vm.startPrank(user);
+
+        bytes memory withdrawCalldata = abi.encodeWithSelector(
+            proxyAsLogic.withdraw.selector,
+            1 ether
+        );
+
+        vm.expectRevert();
+        (success, ) = address(proxy).call(withdrawCalldata);
     }
 }

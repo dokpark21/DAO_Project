@@ -18,8 +18,10 @@ contract DAOUpgradeable is
     address public owner;
     uint256 public totalDeposits; // 총 예치 금액
     address[] public depositors; // 예치자 목록
-    mapping(address => uint256) private _balances; // 각 사용자별 예치 금액 관리
-    mapping(address => uint256) private _lastDepositBlock; // 사용자의 마지막 예치 블록 기록
+    bool public isInvestmentActive;
+    uint256 public beforeInvestmentBalance;
+    mapping(address => uint256) public _balances; // 각 사용자별 예치 금액 관리
+    mapping(address => uint256) public _lastDepositBlock; // 사용자의 마지막 예치 블록 기록
 
     event UpgradeAuthorized(address indexed newImplementation);
     event Deposit(address indexed user, uint256 amount);
@@ -30,6 +32,7 @@ contract DAOUpgradeable is
 
     function initialize(address _owner) public initializer {
         owner = _owner;
+        isInvestmentActive = false;
         start();
     }
 
@@ -38,12 +41,28 @@ contract DAOUpgradeable is
         _;
     }
 
+    modifier notInvestmentActive() {
+        require(!isInvestmentActive, "Investment is active");
+        _;
+    }
+
+    modifier investmentActive() {
+        require(isInvestmentActive, "Investment is not active");
+        _;
+    }
+
     function version() public pure virtual returns (string memory) {
         return "V1";
     }
 
     // 공동 자금 예치 기능
-    function deposit() external payable notEmergency nonReentrant {
+    function deposit()
+        external
+        payable
+        notEmergency
+        nonReentrant
+        notInvestmentActive
+    {
         require(msg.value > 0, "Deposit amount must be greater than zero");
 
         // 중복 예치를 방지하기 위해 사용자의 마지막 예치 블록을 확인
@@ -67,7 +86,7 @@ contract DAOUpgradeable is
     // 공동 자금 인출 기능
     function withdraw(
         uint256 amount
-    ) external payable notEmergency nonReentrant {
+    ) external payable notEmergency nonReentrant notInvestmentActive {
         require(amount > 0, "Withdraw amount must be greater than zero");
         require(
             _balances[msg.sender] >= amount,
@@ -79,6 +98,10 @@ contract DAOUpgradeable is
 
         // 예치 금액 업데이트
         _balances[msg.sender] -= amount;
+        if (_balances[msg.sender] == 0) {
+            delete _lastDepositBlock[msg.sender];
+            delete _balances[msg.sender];
+        }
         totalDeposits -= amount;
 
         payable(msg.sender).transfer(amount);
@@ -90,24 +113,78 @@ contract DAOUpgradeable is
     function useDepositByVote(
         address recipient,
         uint256 amount
-    ) external onlyOwner notEmergency nonReentrant {
+    ) external onlyOwner notEmergency nonReentrant notInvestmentActive {
         require(recipient != address(0), "Invalid recipient address");
         require(amount > 0, "Amount must be greater than zero");
         require(totalDeposits >= amount, "Insufficient funds");
 
-        // 자금 전송
-        totalDeposits -= amount;
-
-        // 유저 토큰 소각 및 자금 초기화
-        uint256 len = depositors.length;
-        for (uint256 i = 0; i < len; i++) {
-            _burn(depositors[i], amount / len);
-            _balances[depositors[i]] = 0;
-        }
+        beforeInvestmentBalance = address(this).balance;
 
         payable(recipient).transfer(amount);
 
         emit FundsUsed(recipient, amount);
+    }
+
+    // 만약 투자가 성공적으로 이루어지면, 투자 이익을 예치자에게 분배
+    // 투자가 실패하면, depositer의 balance를 업데이트(감소)
+    function distributeProfits()
+        external
+        onlyOwner
+        notEmergency
+        nonReentrant
+        investmentActive
+    {
+        uint256 contractBalance = address(this).balance; // 컨트랙트의 현재 잔액(분배할 수익)
+        require(
+            contractBalance > beforeInvestmentBalance,
+            "No profits to distribute"
+        ); // 분배할 수익이 있는지 확인
+        uint256 investmentProfit = contractBalance - beforeInvestmentBalance; // 투자 이익
+        require(investmentProfit > 0, "No profits to distribute"); // 분배할 수익이 있는지 확인
+
+        uint256 fee = (investmentProfit * 10) / 100; // 10% 수수료 계산
+        uint256 profitAfterFee = investmentProfit - fee; // 수수료 차감 후 남은 수익
+
+        uint256 totalSupply = totalSupply(); // 전체 발행된 토큰 수
+
+        // 10% 수수료는 컨트랙트 소유자에게 전송
+        payable(owner).transfer(fee);
+
+        // 나머지 90%를 각 예치자에게 분배
+        for (uint256 i = 0; i < depositors.length; i++) {
+            address depositor = depositors[i];
+            uint256 depositorBalance = balanceOf(depositor); // 예치자의 토큰 잔액
+
+            if (depositorBalance > 0) {
+                // 예치자가 가지고 있는 토큰 비율 계산
+                uint256 share = (depositorBalance * profitAfterFee) /
+                    totalSupply;
+
+                // 이익을 예치자에게 전송
+                payable(depositor).transfer(share);
+            }
+        }
+
+        isInvestmentActive = false; // 투자 종료
+    }
+
+    // 투자 실패 후 예치자의 balance를 업데이트
+    function updateUserDepositAfterInvestMentFail()
+        external
+        onlyOwner
+        investmentActive
+    {
+        uint256 lostAmount = beforeInvestmentBalance - address(this).balance; // 투자 실패로 인한 손실 금액
+
+        uint256 rateLostAmount = lostAmount / beforeInvestmentBalance; // 손실 비율
+        for (uint256 i = 0; i < depositors.length; i++) {
+            if (_balances[depositors[i]] > 0) {
+                uint256 lostAmountForDepositor = _balances[depositors[i]] *
+                    rateLostAmount; // 예치자의 손실 금액
+                _balances[depositors[i]] -= lostAmountForDepositor; // 예치자의 balance 업데이트
+                totalDeposits -= lostAmountForDepositor; // 총 예치 금액 업데이트
+            }
+        }
     }
 
     function emergencyWithdraw(address _to) external onlyEmergency onlyOwner {
