@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../utils/EmergencyStop.sol";
+import {console} from "forge-std/console.sol";
 
 contract DAOUpgradeable is
     Initializable,
@@ -119,6 +120,7 @@ contract DAOUpgradeable is
         require(totalDeposits >= amount, "Insufficient funds");
 
         beforeInvestmentBalance = address(this).balance;
+        isInvestmentActive = true;
 
         payable(recipient).transfer(amount);
 
@@ -127,13 +129,9 @@ contract DAOUpgradeable is
 
     // 만약 투자가 성공적으로 이루어지면, 투자 이익을 예치자에게 분배
     // 투자가 실패하면, depositer의 balance를 업데이트(감소)
-    function distributeProfits()
-        external
-        onlyOwner
-        notEmergency
-        nonReentrant
-        investmentActive
-    {
+    function distributeProfits(
+        address feeRecipient
+    ) external onlyOwner notEmergency nonReentrant investmentActive {
         uint256 contractBalance = address(this).balance; // 컨트랙트의 현재 잔액(분배할 수익)
         require(
             contractBalance > beforeInvestmentBalance,
@@ -148,7 +146,7 @@ contract DAOUpgradeable is
         uint256 totalSupply = totalSupply(); // 전체 발행된 토큰 수
 
         // 10% 수수료는 컨트랙트 소유자에게 전송
-        payable(owner).transfer(fee);
+        payable(feeRecipient).transfer(fee);
 
         // 나머지 90%를 각 예치자에게 분배
         for (uint256 i = 0; i < depositors.length; i++) {
@@ -174,17 +172,24 @@ contract DAOUpgradeable is
         onlyOwner
         investmentActive
     {
-        uint256 lostAmount = beforeInvestmentBalance - address(this).balance; // 투자 실패로 인한 손실 금액
+        uint256 contractBalance = address(this).balance; // 컨트랙트의 현재 잔액
+        require(
+            contractBalance < beforeInvestmentBalance,
+            "Investment is not failed"
+        ); // 투자 실패 여부 확인
+        uint256 lostAmount = beforeInvestmentBalance - contractBalance; // 투자 실패로 인한 손실 금액
 
-        uint256 rateLostAmount = lostAmount / beforeInvestmentBalance; // 손실 비율
         for (uint256 i = 0; i < depositors.length; i++) {
             if (_balances[depositors[i]] > 0) {
-                uint256 lostAmountForDepositor = _balances[depositors[i]] *
-                    rateLostAmount; // 예치자의 손실 금액
+                uint256 lostAmountForDepositor = (_balances[depositors[i]] *
+                    lostAmount) / beforeInvestmentBalance; // 예치자의 손실 금액
                 _balances[depositors[i]] -= lostAmountForDepositor; // 예치자의 balance 업데이트
+
                 totalDeposits -= lostAmountForDepositor; // 총 예치 금액 업데이트
             }
         }
+
+        isInvestmentActive = false; // 투자 종료
     }
 
     function emergencyWithdraw(address _to) external onlyEmergency onlyOwner {
