@@ -55,4 +55,6 @@ contract DAOProxy is ERC1967Upgrade, Proxy {
     fallback() external payable override {
         _delegate(_implementation());
     }
+
+    receive() external payable {}
 }
