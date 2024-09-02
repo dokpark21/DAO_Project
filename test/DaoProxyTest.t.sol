@@ -265,7 +265,7 @@ contract DAOProxyTest is Test {
     }
 
     function testUseDepositByVote() public {
-        address investmentTarget = address(0x789);
+        address investmentTarget = address(0x444);
         vm.startPrank(user);
 
         bytes memory depositCalldata = abi.encodeWithSelector(
@@ -302,7 +302,7 @@ contract DAOProxyTest is Test {
     }
 
     function testWithdrawActiveInvestmentFail() public {
-        address investmentTarget = address(0x789);
+        address investmentTarget = address(0x444);
         vm.startPrank(user);
 
         bytes memory depositCalldata = abi.encodeWithSelector(

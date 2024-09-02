@@ -179,15 +179,17 @@ contract DAOUpgradeable is
         ); // 투자 실패 여부 확인
         uint256 lostAmount = beforeInvestmentBalance - contractBalance; // 투자 실패로 인한 손실 금액
 
+        uint totalLost;
         for (uint256 i = 0; i < depositors.length; i++) {
             if (_balances[depositors[i]] > 0) {
                 uint256 lostAmountForDepositor = (_balances[depositors[i]] *
                     lostAmount) / beforeInvestmentBalance; // 예치자의 손실 금액
                 _balances[depositors[i]] -= lostAmountForDepositor; // 예치자의 balance 업데이트
 
-                totalDeposits -= lostAmountForDepositor; // 총 예치 금액 업데이트
+                totalLost += lostAmountForDepositor; // 총 예치 금액 업데이트
             }
         }
+        totalDeposits -= totalLost;
 
         isInvestmentActive = false; // 투자 종료
     }
