@@ -56,6 +56,10 @@ contract DAOUpgradeable is
         return "V1";
     }
 
+    function changeOwner(address _owner) public onlyOwner {
+        owner = _owner;
+    }
+
     // 공동 자금 예치 기능
     function deposit()
         external
